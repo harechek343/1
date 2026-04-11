@@ -1,136 +1,84 @@
 ---
 name: signal-markup
-description: Use when the user needs fast extraction of atomic buyer signals from a Markdown table of reviews or questions for one product. Best for building a reusable units registry plus signals registry with manual review and trash handling, without category analytics, weighting, or product-card decisions.
+description: "Use when the user needs fast extraction of atomic buyer signals from a Markdown table of reviews or questions for one product. Single-pass extraction into a master registry with emoji-coded full quotes and a flat signal list. No category analytics, no weighting, no product-card decisions."
 ---
 
 # Skill: signal-markup
 
 ## Назначение
 
-Skill `signal-markup` теперь отвечает только за `извлечение и фиксацию реестров`.
-
-Это не аналитический отчёт и не category summary.
-
-Это быстрый первый слой, который должен:
-
-1. принять один Markdown-массив по одному товару;
-2. сохранить полный контекст отзывов;
-3. нарезать атомарные сигналы;
-4. разложить их по категориям;
-5. вернуть 2 реестра:
-   - `units_registry`
-   - `signals_registry`
-
-После этого уже другой skill должен заниматься аналитикой по позитиву, негативу, ожиданиям, сомнениям и так далее.
+Быстрое извлечение атомарных сигналов из отзывов. Один проход. Один промпт. Два блока на выходе.
 
 ## Когда использовать
 
-- есть один массив отзывов/вопросов по одному товару;
-- нужна полная атомарная разметка по всем сигналам;
-- нужно сохранить полный контекст цитат для следующего этапа;
-- нужно получить быстрый реестр для дальнейшей аналитики.
+- есть массив отзывов/вопросов по одному товару;
+- нужна полная атомарная разметка;
+- нужно сохранить полный контекст цитат;
+- нужен быстрый реестр для дальнейшей аналитики.
 
-Не использовать этот skill для:
+## НЕ использовать для
 
-- тематической аналитики по категориям;
+- тематической аналитики (темы, TAGS, группировки);
 - рыночного сравнения нескольких товаров;
 - buyer interpretation;
 - противовесного фильтра;
 - решений по карточке.
 
-## Главная архитектурная идея
-
-Полные цитаты должны храниться один раз в `units_registry`.
-
-Сигналы должны храниться отдельно в `signals_registry` и ссылаться на полную цитату через:
-
-- `product_key`
-- `unit_index`
-
-Это сохраняет контекст, но убирает тяжёлое постоянное дублирование одного и того же отзыва.
-
 ## Вход
 
-Markdown-таблица с обязательными полями:
+Markdown-таблица с полями: `#` (unit_index), `Имя`, `Текст`.
 
-| # | Имя | Дата | Звёзды | Текст |
-|---|-----|------|--------|-------|
-| 1 | Анна | 2025-03-12 | 5 | Крем потрясающий, запах держится весь день |
+Желательно: `Дата`, `Звёзды`.
 
-Рекомендуется также передавать:
-
-- `Товар`
-- `product_key`
-- `Источник`
+Опционально: `Товар`, `Источник`.
 
 Подробнее: [references/input-format.md](references/input-format.md)
 
 ## Выход
 
-Skill должен вернуть только:
+Один документ `master_registry.md` с 5 блоками:
 
-1. `units_registry`
-2. `signals_registry`
-3. `manual_queue`
-4. `trash`
-5. `stats`
+- Блок A: Размеченные цитаты (emoji + жирное выделение)
+- Блок B: Плоский реестр сигналов
+- Блок C: Ручной разбор
+- Блок D: Мусор
+- Блок E: Статистика
 
-Подробнее: [references/output-contract.md](references/output-contract.md)
+Подробнее: [references/output-format.md](references/output-format.md)
 
 ## Pipeline flow
 
-```text
-Input (Markdown-таблица, 1 товар)
+```
+Вход (Markdown-таблица, 1 товар)
     ↓
-[01-normalize-input] → normalized_units + B_total
+[extract-signals] — единственный промпт, один проход
     ↓
-[02-primary-markup] → units_registry + signals_registry + manual_queue + trash + B_clean + stats
+master_registry.md (5 блоков)
     ↓
-[09-finalize-registry] → final registry package for downstream skills
-    ↓
-[Опционально] Человек решает manual_queue → patch → обновлённый registry package
+[Опционально] Человек решает ручной разбор → patch
 ```
 
-## Что именно должен сделать skill
+## Emoji-легенда
 
-### 1. Normalize input
-
-Преобразовать Markdown-таблицу в нормализованный массив единиц.
-
-### 2. Primary markup
-
-В один проход:
-
-- сохранить каждую полную единицу в `units_registry`;
-- извлечь все атомарные сигналы;
-- назначить категории;
-- отправить спорное в `manual_queue`;
-- вынести полностью пустое в `trash`.
-
-### 3. Finalize registry package
-
-Собрать компактный пакет для следующего skill.
-
-Без category reports.
-Без thematic clustering.
-Без repeated quote expansion.
-
-## Выходной принцип
-
-Одна единица отзыва может дать 2, 3, 4, 5 сигналов.
-
-Это нормально.
-
-Но полный отзыв должен храниться один раз.
+| Emoji | Категория |
+|-------|-----------|
+| 🟢 | позитив |
+| 🔴 | негатив |
+| ⚪ | ожидание |
+| 🔵 | сомнение |
+| 🟣 | сравнение |
+| 🟠 | сценарий |
 
 ## Жёсткие запреты
 
 1. Не придумывать сигналы.
-2. Не пересказывать своими словами вместо фрагмента.
-3. Не дублировать один и тот же кусок текста в двух категориях.
-4. Не останавливать прогон из-за `manual_queue`.
-5. Не строить category analytics внутри этого skill.
-6. Не пытаться сразу делать итоговый красивый отчёт по всем категориям.
+2. Не пересказывать своими словами.
+3. Не дублировать один фрагмент в двух категориях.
+4. Не останавливаться из-за ручного разбора.
+5. Не строить category analytics в этом skill.
+6. Не группировать в темы.
+7. Не считать TAGS.
+8. Не делать красивый итоговый отчёт.
 
 ## Инварианты
 
@@ -138,28 +86,17 @@ Input (Markdown-таблица, 1 товар)
 - Один и тот же кусок текста нельзя использовать дважды.
 - Каждый сигнал попадает только в одну категорию.
 - Если категория неочевидна — в ручной разбор.
-- При сомнении "мусор или сигнал" — считать сигналом.
-- Полная цитата сохраняется один раз в `units_registry`.
-- Аналитика идёт потом, отдельно.
+- При сомнении «мусор или сигнал» — считать сигналом.
+- Каждый отзыв в Блоке A ровно один раз (не дублируется).
 
 ## Ссылки
 
 ### References
 - [Формат входа](references/input-format.md)
+- [Формат выхода](references/output-format.md)
 - [Категории](references/categories.md)
 - [Протокол составных сигналов](references/composite-signal-protocol.md)
-- [Правила ручного разбора](references/manual-review-rules.md)
-- [Правила подсчёта](references/counting-rules.md)
-- [Контракт выходных данных](references/output-contract.md)
 - [Спорные случаи](references/edge-cases.md)
 
 ### Prompts
-- [01 — Normalize input](prompts/01-normalize-input.md)
-- [02 — Primary markup](prompts/02-primary-markup.md)
-- [09 — Finalize registry](prompts/09-finalize-registry.md)
-
-## Важно
-
-Старые category prompts `03–08` сохраняются только как legacy-материалы.
-
-Они больше не являются основным путём этого skill.
+- [extract-signals](prompts/extract-signals.md)
