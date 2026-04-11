@@ -63,6 +63,8 @@ Markdown-таблица с обязательными полями:
 - `product_key`
 - `Источник`
 
+Если вход — сырой HTML или текст (не таблица), сначала выполнить шаг 00 для конвертации.
+
 Подробнее: [references/input-format.md](references/input-format.md)
 
 ## Выход
@@ -80,7 +82,9 @@ Skill должен вернуть только:
 ## Pipeline flow
 
 ```text
-Input (Markdown-таблица, 1 товар)
+Input (сырой HTML/текст ИЛИ готовая Markdown-таблица, 1 товар)
+    ↓
+[00-raw-to-table] → Markdown-таблица (если вход сырой; если уже таблица — пропустить)
     ↓
 [01-normalize-input] → normalized_units + B_total
     ↓
@@ -92,6 +96,10 @@ Input (Markdown-таблица, 1 товар)
 ```
 
 ## Что именно должен сделать skill
+
+### 0. Raw to table (если вход сырой)
+
+Если вход — не Markdown-таблица, а сырой HTML или текст из маркетплейса, преобразовать его в Markdown-таблицу по промпту 00.
 
 ### 1. Normalize input
 
@@ -154,6 +162,7 @@ Input (Markdown-таблица, 1 товар)
 - [Спорные случаи](references/edge-cases.md)
 
 ### Prompts
+- [00 — Raw to table](prompts/00-raw-to-table.md)
 - [01 — Normalize input](prompts/01-normalize-input.md)
 - [02 — Primary markup](prompts/02-primary-markup.md)
 - [09 — Finalize registry](prompts/09-finalize-registry.md)
